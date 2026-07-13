@@ -1,0 +1,20 @@
+# 個人累積資料與設定（絕不上傳）
+spread_daily.json
+spread_intraday.json
+spread_inst.json
+spread_bench.json
+spread_snapshots.jsonl
+spread_config.json
+
+# Pages 發布管線的本機工作目錄（各自是獨立 git repo / 暫存）
+pages_site/
+pages_data/
+pages_buffer/
+pages_state.json
+pages_publish.log
+pages_publish.log.1
+pages_publish.lock
+
+# 快取
+__pycache__/
+*.pyc
