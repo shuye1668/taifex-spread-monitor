@@ -164,15 +164,15 @@
 
 ---
 
-## 6. 一頁待辦清單
+## 6. 一頁待辦清單（2026-07-13 實作狀態）
 
-1. [ ] Phase 0 三個決策拍板（內容範圍／單雙 repo／頻率）
-2. [ ] 拆出 `web/index.html`，Python 改讀檔回傳
-3. [ ] 前端加 `DATA_MODE` static adapter（含延遲浮水印、localStorage 設定）
-4. [ ] 寫 exporter（延遲/修剪版 JSON；選配加密）
-5. [ ] `HOST` 預設改 `127.0.0.1`（環境變數可覆寫）
-6. [ ] 建私有 code repo ＋ 公開 pages repo（`main` 殼、`data` 孤兒分支）
-7. [ ] 開通 Pages，確認網址可開
-8. [ ] pusher 腳本（amend＋force）＋ PAT ＋ 掛排程/服務
-9. [ ] Phase 4 五項驗收
+1. [x] Phase 0 決策：雙 repo／延遲 15 分／每 5 分鐘更新／衍生指標＋免責聲明
+2. [x] 靜態前端：改為 `pages_publish.py --build-site` 從主程式自動抽取 HTML 並注入 fetch/SSE 攔截 shim（主程式**零改動**，比拆檔更安全，且前端改版後重跑即同步）
+3. [x] shim：`/api/*`→靜態 JSON 對映、SSE 停用、設定改存 localStorage、底部延遲橫幅、noindex
+4. [x] exporter＋delayer＋pusher 三合一 `pages_publish.py`（15 分延遲緩衝、amend+force 單 commit、時段分級頻率）
+5. [x] `HOST` 改為環境變數 `SPREAD_HOST` 可覆寫（預設維持 `0.0.0.0` 不影響既有區網使用）
+6. [x] 本地 git repo 三份就緒：code（main）、pages_site（main）、pages_data（data）
+7. [x] 工作排程器 `SpreadPagesPublish` 每 5 分鐘背景執行（pythonw 無視窗）
+8. [x] 本地端到端驗收通過（靜態頁完整渲染、橫幅/延遲時間/快照數正確）
+9. [ ] **唯一剩餘人工步驟**：執行 `setup_github.ps1` 完成 GitHub 登入 → 自動建 repo、推送、開通 Pages
 10. [ ] 視需求排 Phase 5（密碼切即時、自訂網域、歷史頁）

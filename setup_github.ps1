@@ -56,11 +56,17 @@ if ($LASTEXITCODE -ne 0) {
 Pop-Location
 
 # ---- 4) data 分支（延遲資料）----
-Push-Location pages_data
-git remote get-url origin 2>$null | Out-Null
-if ($LASTEXITCODE -ne 0) { git remote add origin "https://github.com/$owner/$PagesRepo.git" }
-git push --force -u origin data
-Pop-Location
+if (Test-Path "pages_data\.git") {
+    Push-Location pages_data
+    git remote get-url origin 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { git remote add origin "https://github.com/$owner/$PagesRepo.git" }
+    git rev-parse --verify HEAD 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) { git push --force -u origin data }
+    else { Write-Host "pages_data 尚無首次發布 commit，排程器稍後會自動推送。" -ForegroundColor Yellow }
+    Pop-Location
+} else {
+    Write-Host "pages_data 尚未建立（首次發布會自動建立並由排程器推送）。" -ForegroundColor Yellow
+}
 
 # ---- 5) 開通 GitHub Pages（main 分支根目錄）----
 $null = gh api -X POST "repos/$owner/$PagesRepo/pages" -f "source[branch]=main" -f "source[path]=/" 2>$null
