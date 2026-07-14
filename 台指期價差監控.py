@@ -1146,13 +1146,22 @@ html { -webkit-text-size-adjust: 100%; }
     min-height: 38px; padding: 7px 12px; font-size: 14px;
   }
   .toolbar { gap: 6px; }
-  /* 報價表：卡片內橫向滑動＋首欄固定，價差欄位不再被截斷 */
-  table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  table th, table td { font-size: 12px; padding: 5px 4px; white-space: nowrap; }
-  table th:first-child, table td:first-child {
-    position: sticky; left: 0; background: #fff; z-index: 2;
-    box-shadow: 2px 0 4px -2px rgba(30,40,70,.18);
-  }
+  /* 報價表：改堆疊卡片式——每個合約一個區塊、欄位直排帶標籤，免橫向滑動 */
+  #cards table, #cards table tbody { display: block; }
+  #cards table tr { display: block; border: 1px solid #e2e8f2; border-radius: 9px;
+    padding: 6px 10px 5px; margin: 0 0 8px; background: #fdfdfe; }
+  #cards table tr:first-child { display: none; }   /* 表頭列改由各值前置標籤取代 */
+  #cards table td { display: flex; justify-content: space-between; align-items: baseline;
+    gap: 8px; padding: 3.5px 0; border-bottom: none; text-align: right; font-size: 13.5px; }
+  #cards table td:first-child { display: block; text-align: left; font-weight: 600;
+    border-bottom: 1px dashed #e2e8f2; padding-bottom: 6px; margin-bottom: 4px; }
+  #cards table td::before { color: #778; font-size: 11.5px; font-weight: 400; flex: 0 0 auto; }
+  #cards table td:first-child::before { content: none; }
+  #cards table td:nth-child(2)::before { content: "期貨價"; }
+  #cards table td:nth-child(3)::before { content: "表面價差"; }
+  #cards table td:nth-child(4)::before { content: "未除息"; }
+  #cards table td:nth-child(5)::before { content: "還原價差"; }
+  #cards table td:nth-child(5) { font-size: 16px; font-weight: 600; }
   /* 宏觀卡改單欄，標題/數值不再直排擠壓 */
   #macroCards { grid-template-columns: 1fr !important; }
   .ic-head { flex-wrap: nowrap; }
