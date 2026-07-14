@@ -1173,6 +1173,40 @@ html { -webkit-text-size-adjust: 100%; }
   #hcv { height: 300px; }
   /* 盤中子圖：極窄螢幕改單欄 */
   .card { padding: 10px 10px; }
+  /* —— 資訊架構重排：核心意圖＝盤中即時價差 → 主卡＋快照圖進第一屏，次要區塊後移/摺疊 —— */
+  body { display: flex; flex-direction: column; }
+  body > * { order: 50; }
+  body > h1 { order: 1; }
+  body > .toolbar { order: 2; }
+  body > #err { order: 3; }
+  body > .panel:has(#cards) { order: 4; }      /* 價差主卡＋盤中圖 */
+  body > #cfgPanel { order: 5; }               /* 參數設定開啟時就近顯示 */
+  body > #staleAlert { order: 6; }
+  body > #ctxBar { order: 7; }                 /* 市場脈絡 */
+  body > #refBar { order: 8; }
+  #msecMacro, body > #macroCards { order: 9; } /* 宏觀卡（摺疊） */
+  #msecMini, body > .panel:has(#miniGrid) { order: 10; }  /* 子圖表（摺疊）；判讀說明留在底部 */
+  /* 主面板內：主卡 → 盤中圖 → 其他期貨 */
+  .chartleft { display: contents; }
+  #cards { order: 1; }
+  .chartmain { order: 2; }
+  #sidePanel { order: 3; }
+  #chartSplit { display: none; }
+  /* 簡潔為主：隱藏中間計算欄（表面價差/未除息）與近遠月列——桌面版仍完整顯示 */
+  #cards table td:nth-child(3), #cards table td:nth-child(4) { display: none; }
+  #cards table tr:nth-child(4) { display: none; }
+  .sub, #metaBadge { display: none; }
+  /* 除息提醒收斂為兩行，點一下展開全文 */
+  #staleAlert { max-height: 3.2em; overflow: hidden; font-size: 11.5px; }
+  #staleAlert.mexpand { max-height: none; }
+  /* 摺疊區塊的觸控標頭 */
+  .msec-h { display: flex; justify-content: space-between; align-items: center;
+    background: #fff; border: 1px solid #dde3ec; border-radius: 10px;
+    padding: 11px 12px; font-size: 14px; font-weight: 600; color: #334;
+    margin: 0 0 10px; cursor: pointer; user-select: none; }
+  .msec-h .msec-tg { color: #99a; }
+  .msec-collapsed { display: none !important; }
+  .msec-innerh3 { display: none; }
   /* 盤中子圖：標題單行省略不再多行換行、數值獨立一行、圖形收斂為 16:9 左右 */
   .mini { padding: 6px 9px 3px; }
   .mini .mt { flex-direction: column; align-items: stretch; gap: 0; margin-bottom: 2px; }
@@ -3120,6 +3154,38 @@ function setupChartSplit() {
   document.addEventListener("mouseup", stop);
   document.addEventListener("touchend", stop);
 }
+
+// ---------- 手機版資訊架構（≤640px）：價差主卡優先、次要區塊摺疊、預設最即時的快照圖 ----------
+(function () {
+  const mq = window.matchMedia && window.matchMedia("(max-width: 640px)");
+  if (!mq || !mq.matches) return;
+  hist.res = "snap";                       // 手機第一屏直接呈現「盤中每分鐘快照(還原)」
+  const sa = document.getElementById("staleAlert");
+  if (sa) sa.addEventListener("click", () => sa.classList.toggle("mexpand"));
+  function makeSec(id, title, target, onOpen) {
+    if (!target || document.getElementById(id)) return;
+    const h3i = target.querySelector(":scope > h3");
+    if (h3i) h3i.classList.add("msec-innerh3");
+    const h = document.createElement("div");
+    h.className = "msec-h"; h.id = id;
+    h.innerHTML = "<span>" + title + "</span><span class='msec-tg'>▸</span>";
+    target.parentNode.insertBefore(h, target);
+    target.classList.add("msec-collapsed");
+    h.addEventListener("click", () => {
+      const open = !target.classList.toggle("msec-collapsed");
+      h.querySelector(".msec-tg").textContent = open ? "▾" : "▸";
+      if (open && onOpen) setTimeout(onOpen, 30);   // 展開後補繪（隱藏時 canvas 尺寸為 0）
+    });
+  }
+  makeSec("msecMacro", "宏觀對照卡", document.getElementById("macroCards"),
+    () => { for (const k in macroCharts) macroCharts[k].onResize(); });
+  const miniPanel = document.getElementById("miniGrid") ? document.getElementById("miniGrid").closest(".panel") : null;
+  makeSec("msecMini", "盤中子圖表", miniPanel,
+    () => { for (const k in miniData) drawMini(k); });
+  let notePanel = null;
+  document.querySelectorAll("h3").forEach(h => { if (h.textContent.trim() === "判讀說明") notePanel = h.closest(".panel"); });
+  makeSec("msecNote", "判讀說明", notePanel, null);
+})();
 
 // ---------- 初始化 ----------
 document.getElementById("btnAuto").className = "on";
