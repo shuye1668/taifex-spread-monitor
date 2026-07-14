@@ -1207,6 +1207,12 @@ html { -webkit-text-size-adjust: 100%; }
   .msec-h .msec-tg { color: #99a; }
   .msec-collapsed { display: none !important; }
   .msec-innerh3 { display: none; }
+  /* 圖表區最大化（看盤比例）：面板內距收斂＋切換按鈕緊湊化 */
+  .panel { padding: 10px 8px; }
+  .panel h3 { font-size: 14.5px; margin-bottom: 6px; }
+  .tabs { gap: 4px; margin-bottom: 6px; }
+  .tabs button { min-height: 32px; padding: 4px 9px; font-size: 12.5px; }
+  .tabs .sep { margin: 0 2px; }
   /* 盤中子圖：標題單行省略不再多行換行、數值獨立一行、圖形收斂為 16:9 左右 */
   .mini { padding: 6px 9px 3px; }
   .mini .mt { flex-direction: column; align-items: stretch; gap: 0; margin-bottom: 2px; }
@@ -1802,19 +1808,23 @@ function buildHistTabs() {
   box.innerHTML = "";
   const addBtn = (txt, sel, fn, tip) => { const b = document.createElement("button"); b.textContent = txt; if (tip) b.title = tip; b.className = sel ? "sel" : ""; b.onclick = fn; box.appendChild(b); };
   const addSep = () => { const s = document.createElement("div"); s.className = "sep"; box.appendChild(s); };
+  const mob = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;   // 手機：短標籤緊湊排列
+  const RES_SHORT = { snap: "每分鐘", m5: "5分鐘", D: "日線" };
   for (const p of histProducts()) addBtn(p, p === hist.prod, () => { hist.prod = p; loadHist(); }, PROD_NAMES[p]);
   addSep();
   for (const [k, label] of RES_LIST) {
-    addBtn(label, k === hist.res, () => { hist.res = k; resetView(); loadHist(); }, RES_TIPS[k] || "");
+    addBtn(mob ? (RES_SHORT[k] || label) : label, k === hist.res, () => { hist.res = k; resetView(); loadHist(); }, RES_TIPS[k] || "");
   }
   addSep();
-  addBtn("放大 ＋", false, () => doZoom(0.25), "放大時間刻度（也可用滾輪或拖曳下方時間軸）");
-  addBtn("縮小 －", false, () => doZoom(-0.25), "縮小時間刻度，看更長的期間");
-  addBtn("重置視圖", false, () => { resetView(); applyAnchor(); drawHist(); }, "恢復預設視圖：盤中週期＝本交易日、日線＝近120日（也可雙擊圖面）");
-  addBtn("跳到最新", false, () => { hist.panX = 0; drawHist(); }, "把畫面拉回最新一筆資料");
+  addBtn(mob ? "＋" : "放大 ＋", false, () => doZoom(0.25), "放大時間刻度（也可用滾輪或拖曳下方時間軸）");
+  addBtn(mob ? "－" : "縮小 －", false, () => doZoom(-0.25), "縮小時間刻度，看更長的期間");
+  addBtn(mob ? "重置" : "重置視圖", false, () => { resetView(); applyAnchor(); drawHist(); }, "恢復預設視圖：盤中週期＝本交易日、日線＝近120日（也可雙擊圖面）");
+  addBtn(mob ? "最新" : "跳到最新", false, () => { hist.panX = 0; drawHist(); }, "把畫面拉回最新一筆資料");
   if (hist.res === "D" && hist.prod === "TX") {
     addSep();
-    const fiLbl = { bar: "外資OI：柱狀", line: "外資OI：折線", off: "外資OI：隱藏" }[hist.fiMode] || "外資OI：柱狀";
+    const fiLbl = (mob
+      ? { bar: "外資OI:柱", line: "外資OI:線", off: "外資OI:隱" }
+      : { bar: "外資OI：柱狀", line: "外資OI：折線", off: "外資OI：隱藏" })[hist.fiMode] || "外資OI";
     addBtn(fiLbl, hist.fiMode !== "off",
       () => { hist.fiMode = hist.fiMode === "bar" ? "line" : (hist.fiMode === "line" ? "off" : "bar"); buildHistTabs(); drawHist(); },
       "外資台指期淨未平倉量疊加方式：柱狀／折線(獨立左軸·口)／隱藏。僅日線×台指期(TX)有資料");
@@ -2069,14 +2079,15 @@ function drawHist() {
           const x = xOfCoord(base + hours[hi]);
           if (x < M.l || x > W - M.r) continue;
           let lbl = String(9 + hi).padStart(2, "0") + ":00";
-          if (firstTick) { lbl = dlbl + " " + lbl; firstTick = false; }
+          if (firstTick) { if (W - M.l - M.r >= 340) lbl = dlbl + " " + lbl; firstTick = false; }   // 窄圖省略日期前綴避免與下一刻度重疊
+          ctx.textAlign = x < M.l + 26 ? "left" : (x > W - M.r - 26 ? "right" : "center");   // 邊緣標籤不切字
           ctx.fillText(lbl, x, H - M.b + 6);
           ctx.strokeStyle = "#f0f3f8";
           ctx.beginPath(); ctx.moveTo(x, M.t); ctx.lineTo(x, H - M.b); ctx.stroke();
         }
       } else {
         const xMid = xOfCoord(base + SESSION_MIN / 2);
-        if (xMid >= M.l && xMid <= W - M.r) ctx.fillText(dlbl, xMid, H - M.b + 6);
+        if (xMid >= M.l && xMid <= W - M.r) { ctx.textAlign = xMid < M.l + 26 ? "left" : (xMid > W - M.r - 26 ? "right" : "center"); ctx.fillText(dlbl, xMid, H - M.b + 6); }
         const xb = xOfCoord(base);
         if (xb >= M.l && xb <= W - M.r) { ctx.strokeStyle = "#eef1f6"; ctx.beginPath(); ctx.moveTo(xb, M.t); ctx.lineTo(xb, H - M.b); ctx.stroke(); }
       }
@@ -2094,6 +2105,7 @@ function drawHist() {
         if (lastLblDay !== null && dayStr !== lastLblDay) lbl = dayStr.slice(5).replace("-", "/") + " " + lbl;
         lastLblDay = dayStr;
       }
+      ctx.textAlign = x < M.l + 26 ? "left" : (x > W - M.r - 26 ? "right" : "center");   // 邊緣標籤不切字
       ctx.fillText(lbl, x, H - M.b + 6);
       ctx.strokeStyle = "#f0f3f8";
       ctx.beginPath(); ctx.moveTo(x, M.t); ctx.lineTo(x, H - M.b); ctx.stroke();
@@ -2560,7 +2572,8 @@ function makeInstChart(host, def, startOpen) {
   const head = host.querySelector(".ic-head"), body = host.querySelector(".ic-body"), cv = host.querySelector(".ic-cv"), rbox = host.querySelector(".ic-ranges"), tg = host.querySelector(".ic-tg");
   const ctx = cv.getContext("2d");
   let W = 0, H = 0, DPR = 1;
-  const M = { l: 6, r: 52, t: 8, b: 18 };
+  const M = (window.matchMedia && window.matchMedia("(max-width: 640px)").matches)
+    ? { l: 4, r: 46, t: 8, b: 18 } : { l: 6, r: 52, t: 8, b: 18 };   // 手機：壓縮邊距放寬繪圖區
   MACRO_RANGES.forEach((r, i) => {
     const b = document.createElement("button"); b.textContent = r[0]; b.className = "ic-rbtn" + (i === st.ri ? " sel" : "");
     b.onclick = (e) => { e.stopPropagation(); st.ri = i; st.zoom = 1; st.panX = 0; markRanges(); load(true); };
@@ -2615,7 +2628,7 @@ function makeInstChart(host, def, startOpen) {
     if (st.prev != null && st.prev >= mn && st.prev <= mx) { const y = yOf(st.prev); ctx.strokeStyle = "#c5cede"; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(M.l, y); ctx.lineTo(W - M.r, y); ctx.stroke(); ctx.setLineDash([]); }
     ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillStyle = "#99a";
     const every = Math.max(1, Math.round(64 / ppb())), iv = MACRO_RANGES[st.ri][2], intraday = (iv.indexOf("m") > -1);
-    for (let i = i0; i <= i1; i++) { if (i % every !== 0) continue; const x = xOf(i); if (x < M.l || x > W - M.r) continue; const dt = new Date(st.data.t[i] * 1000); const lbl = intraday ? dt.toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit" }) : (dt.getMonth() + 1) + "/" + dt.getDate(); ctx.fillText(lbl, x, H - M.b + 4); }
+    for (let i = i0; i <= i1; i++) { if (i % every !== 0) continue; const x = xOf(i); if (x < M.l || x > W - M.r) continue; const dt = new Date(st.data.t[i] * 1000); const lbl = intraday ? dt.toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit" }) : (dt.getMonth() + 1) + "/" + dt.getDate(); ctx.textAlign = x < M.l + 22 ? "left" : (x > W - M.r - 22 ? "right" : "center"); ctx.fillText(lbl, x, H - M.b + 4); }
     const lastV = st.data.c[i1], base = (st.prev != null) ? st.prev : st.data.c[i0];
     ctx.save(); ctx.beginPath(); ctx.rect(M.l, M.t, W - M.l - M.r, H - M.t - M.b); ctx.clip();
     ctx.strokeStyle = (lastV != null && base != null && lastV >= base) ? "#c92a2a" : "#2b8a3e"; ctx.lineWidth = 1.4; ctx.beginPath();
@@ -3160,6 +3173,7 @@ function setupChartSplit() {
   const mq = window.matchMedia && window.matchMedia("(max-width: 640px)");
   if (!mq || !mq.matches) return;
   hist.res = "snap";                       // 手機第一屏直接呈現「盤中每分鐘快照(還原)」
+  M.l = 4; M.r = 48; M.b = 24;             // 看盤比例：壓縮主圖邊距，繪圖區最大化
   const sa = document.getElementById("staleAlert");
   if (sa) sa.addEventListener("click", () => sa.classList.toggle("mexpand"));
   function makeSec(id, title, target, onOpen) {
