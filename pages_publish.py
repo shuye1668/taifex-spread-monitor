@@ -453,7 +453,6 @@ SHIM_JS = r"""
         "background:#1f4e8c;color:#fff;font:12px/1.7 -apple-system,'Microsoft JhengHei',sans-serif;" +
         "text-align:center;padding:3px 10px;opacity:.94;";
       document.body.appendChild(el);
-      document.body.style.paddingBottom = "26px";
     }
     var m = lastMeta, asOf = (m && (m.dataAsOf || m.now)) || 0;
     var stale = asOf && (Date.now() / 1000 - asOf) > 2400;
@@ -461,6 +460,7 @@ SHIM_JS = r"""
     el.textContent = "GitHub Pages 延遲快照版｜資料時間 " + (asOf ? fmtTW(asOf) : "—") +
       "（延遲 ≥" + ((m && m.delayMin) || 15) + " 分鐘" + (stale ? "，更新滯後" : "") +
       "）｜非即時報價，僅供參考，不構成投資建議";
+    document.body.style.paddingBottom = (el.offsetHeight + 6) + "px";
   }
   document.addEventListener("DOMContentLoaded", function () {
     document.title += "（延遲快照版）";

@@ -1134,6 +1134,45 @@ td { padding: 8px 5px; }
 .chartleft #sidePanel .sp-top { font-size: 15.5px; }
 .chartleft #sidePanel .sp-sub { font-size: 12.5px; }
 .chartleft #sidePanel .sp-row { padding: 9px 4px; }
+
+/* ============ 行動版全面優化（≤640px；對桌面零影響） ============ */
+html { -webkit-text-size-adjust: 100%; }
+@media (max-width: 640px) {
+  body { padding: 8px 8px 30px; font-size: 14px; }
+  h1 { font-size: 18px; }
+  .sub { font-size: 11.5px; }
+  /* 觸控目標放大：工具列按鈕好按 */
+  .toolbar button, .toolbar .btn, .tabs button {
+    min-height: 38px; padding: 7px 12px; font-size: 14px;
+  }
+  .toolbar { gap: 6px; }
+  /* 報價表：卡片內橫向滑動＋首欄固定，價差欄位不再被截斷 */
+  table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table th, table td { font-size: 12px; padding: 5px 4px; white-space: nowrap; }
+  table th:first-child, table td:first-child {
+    position: sticky; left: 0; background: #fff; z-index: 2;
+    box-shadow: 2px 0 4px -2px rgba(30,40,70,.18);
+  }
+  /* 宏觀卡改單欄，標題/數值不再直排擠壓 */
+  #macroCards { grid-template-columns: 1fr !important; }
+  .ic-head { flex-wrap: nowrap; }
+  .ic-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ic-val { font-size: 15px; }
+  /* 桌面操作提示（拖曳/滾輪）在觸控裝置只佔空間，隱藏 */
+  .hint, .ic-hint { display: none; }
+  /* 主歷史圖高度收斂，留更多視野給下方內容 */
+  #hcv { height: 300px; }
+  /* 盤中子圖：極窄螢幕改單欄 */
+  .card { padding: 10px 10px; }
+  /* iOS 聚焦自動放大會打亂版面：表單字級固定 16px */
+  input[type=number], input[type=text], input[type=password], select, textarea { font-size: 16px; }
+}
+@media (max-width: 360px) {
+  .mini { width: 100% !important; }
+}
+@media (pointer: coarse) {
+  .hint, .ic-hint { display: none; }
+}
 </style>
 </head>
 <body>
