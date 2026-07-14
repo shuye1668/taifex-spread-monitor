@@ -1173,11 +1173,19 @@ html { -webkit-text-size-adjust: 100%; }
   #hcv { height: 300px; }
   /* 盤中子圖：極窄螢幕改單欄 */
   .card { padding: 10px 10px; }
+  /* 盤中子圖：標題單行省略不再多行換行、數值獨立一行、圖形收斂為 16:9 左右 */
+  .mini { padding: 6px 9px 3px; }
+  .mini .mt { flex-direction: column; align-items: stretch; gap: 0; margin-bottom: 2px; }
+  .mini .mt > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: 11px; color: #667; }
+  .mini .mt .mv { font-size: 13.5px; font-weight: 600; }
+  .mini canvas { height: 96px; }
   /* iOS 聚焦自動放大會打亂版面：表單字級固定 16px */
   input[type=number], input[type=text], input[type=password], select, textarea { font-size: 16px; }
 }
 @media (max-width: 360px) {
   .mini { width: 100% !important; }
+  .mini canvas { height: 110px; }
 }
 @media (pointer: coarse) {
   .hint, .ic-hint { display: none; }
@@ -2821,15 +2829,16 @@ function drawMini(k, hi) {
   // 軸線與刻度
   c.strokeStyle = "#dde3ec"; c.beginPath(); c.moveTo(0, h - 14); c.lineTo(w, h - 14); c.stroke();
   c.font = "9.5px sans-serif"; c.textBaseline = "bottom";
-  const wide = w >= 380;
+  const wide = w >= 380, narrow = w < 190;   // narrow＝手機兩欄窄卡，刻度減量避免重疊
   const tks = [];
   if (d.def.type === "ext") {
-    for (let k2 = 0; k2 <= 4; k2++) tks.push(t0 + k2 * (t1 - t0) / 4);
+    const nSegE = narrow ? 2 : 4;
+    for (let k2 = 0; k2 <= nSegE; k2++) tks.push(t0 + k2 * (t1 - t0) / nSegE);
   } else if (d.def.type === "us" || d.def.us) {
-    const span = t1 - t0, nSeg = span > 8 * 3600 ? 5 : 4;   // 含盤前盤後(較長)→多一格
+    const span = t1 - t0, nSeg = narrow ? 2 : (span > 8 * 3600 ? 5 : 4);   // 含盤前盤後(較長)→多一格
     for (let k2 = 0; k2 <= nSeg; k2++) tks.push(t0 + k2 * span / nSeg);
   } else if (d.def.win === "fx") {
-    for (const k2 of (wide ? [0, 1, 2, 3, 4, 5, 6, 7] : [0, 2, 4, 6])) tks.push(t0 + k2 * 3600);
+    for (const k2 of (wide ? [0, 1, 2, 3, 4, 5, 6, 7] : (narrow ? [0, 3, 6] : [0, 2, 4, 6]))) tks.push(t0 + k2 * 3600);
   } else {
     // 08:45起：刻度取整點 09:00–13:00
     for (const k2 of (wide ? [0, 1, 2, 3, 4] : [0, 2, 4])) tks.push(t0 + 900 + k2 * 3600);
