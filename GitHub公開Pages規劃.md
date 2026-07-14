@@ -174,5 +174,6 @@
 6. [x] 本地 git repo 三份就緒：code（main）、pages_site（main）、pages_data（data）
 7. [x] 工作排程器 `SpreadPagesPublish` 每 5 分鐘背景執行（pythonw 無視窗）
 8. [x] 本地端到端驗收通過（靜態頁完整渲染、橫幅/延遲時間/快照數正確）
-9. [ ] **唯一剩餘人工步驟**：執行 `setup_github.ps1` 完成 GitHub 登入 → 自動建 repo、推送、開通 Pages
+9. [x] GitHub 上架完成（2026-07-14）：帳號 `shuye1668`、公開網站 **https://shuye1668.github.io/taifex-spread-pages/**、
+   私有碼庫 `taifex-spread-monitor`、公開 `taifex-spread-pages`（main＝殼頁、data＝延遲資料）、Pages 已開通並線上驗收通過
 10. [ ] 視需求排 Phase 5（密碼切即時、自訂網域、歷史頁）

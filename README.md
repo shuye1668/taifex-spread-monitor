@@ -14,6 +14,10 @@ python 台指期價差監控.py        # 預設埠 8701
 
 ## GitHub Pages 延遲快照版
 
+- **公開網站**：https://shuye1668.github.io/taifex-spread-pages/
+- **公開 repo**：https://github.com/shuye1668/taifex-spread-pages（`main`＝殼頁、`data`＝延遲資料）
+- **私有 repo**：https://github.com/shuye1668/taifex-spread-monitor（本原始碼）
+
 `pages_publish.py` 會把儀表板發布成公開的靜態延遲版（延遲 ≥15 分鐘、每 5 分鐘更新）：
 
 | 指令 | 用途 |
