@@ -45,7 +45,7 @@ LOCK_FILE = BASE / "pages_publish.lock"
 
 DELAY_SEC = 900                     # 公開資料最低延遲（15 分鐘）
 SNAP_WINDOW_SEC = 48 * 3600         # 公開快照只保留最近 48 小時
-BUFFER_KEEP_SEC = 2 * 3600          # 緩衝區保留 2 小時
+BUFFER_KEEP_SEC = 1800              # 緩衝區保留 30 分鐘（1 分鐘粒度下約 30 份）
 NIGHT_PUBLISH_GAP = 1500            # 夜盤發布間隔（25 分）
 CLOSED_PUBLISH_GAP = 3300           # 收盤時段發布間隔（55 分）
 
@@ -322,6 +322,9 @@ def run_cycle():
         return
 
     # 盤中（日盤/夜盤）：每輪匯出進緩衝；發布必須滿 15 分鐘延遲
+    # 排程器每 1 分鐘觸發：日盤全速（延遲穩定壓在 15-16 分）；夜盤降頻到每 5 分鐘
+    if kind == "night" and datetime.now(TZ_TW).minute % 5:
+        return
     try:
         json.loads(http_get("/api/meta", timeout=8))
     except Exception:
