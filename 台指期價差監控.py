@@ -286,18 +286,9 @@ def fetch_usidx():
         try:
             d = json.loads(_http(
                 "https://query1.finance.yahoo.com/v8/finance/chart/" + enc +
-                "?interval=5m&range=1d&includePrePost=true", headers={"User-Agent": UA}, timeout=12))
-            r0 = d["chart"]["result"][0]
-            ts = r0.get("timestamp") or []
-            cl = (r0.get("indicators", {}).get("quote") or [{}])[0].get("close") or []
-            t2, c2 = [], []
-            for a, b in zip(ts, cl):
-                if b is not None:
-                    t2.append(a)
-                    c2.append(round(float(b), 2))
-            out[sym] = {"t": t2, "c": c2,
-                        "prev": r0.get("meta", {}).get("chartPreviousClose"),
-                        "sess": _yahoo_sessions(r0.get("meta", {}))}
+                "?interval=5m&range=5d&includePrePost=true", headers={"User-Agent": UA}, timeout=12))
+            t2, c2, prev, sess = _yahoo_last_session(d["chart"]["result"][0])
+            out[sym] = {"t": t2, "c": c2, "prev": prev, "sess": sess}
         except Exception:
             pass
     with _cache_lock:
@@ -930,6 +921,48 @@ def _yahoo_sessions(meta):
     return out or None
 
 
+def _yahoo_last_session(r0, dec=2):
+    """指數用（range=5d 的 5 分線）：只留最近一個「有成交」的時段，prev＝前一時段最後一筆（＝官方收盤）。
+    2026-10-05：range=1d 在美股盤前一開始（台北 16:00）就換成新的一天，指數沒有盤前成交 →
+    16:00～21:30 卡片整段顯示「—」，且當下 chartPreviousClose 會變成前前日收盤。
+    改成自己切時段：新時段還沒成交就續顯示上一段（前夜收盤）。個股有盤前盤後成交，不適用。"""
+    m = r0.get("meta", {}) or {}
+    ts = r0.get("timestamp") or []
+    cl = (r0.get("indicators", {}).get("quote") or [{}])[0].get("close") or []
+    pts = [(a, round(float(b), dec)) for a, b in zip(ts, cl) if b is not None]
+
+    def seg(x):
+        x = x[0] if isinstance(x, list) and x else x
+        if isinstance(x, dict) and x.get("start") is not None and x.get("end") is not None:
+            return [int(x["start"]), int(x["end"])]
+        return None
+
+    days = []
+    tps = m.get("tradingPeriods")
+    if isinstance(tps, dict):
+        pres, posts = tps.get("pre") or [], tps.get("post") or []
+        for i, rg in enumerate(tps.get("regular") or []):
+            d = {"reg": seg(rg),
+                 "pre": seg(pres[i]) if i < len(pres) else None,
+                 "post": seg(posts[i]) if i < len(posts) else None}
+            days.append({k: v for k, v in d.items() if v})
+    cur = _yahoo_sessions(m)
+    if cur and cur.get("reg") and all(d.get("reg") != cur["reg"] for d in days):
+        days.append(cur)
+    days = sorted((d for d in days if d.get("reg")), key=lambda d: d["reg"][0])
+    if not days:
+        return [p[0] for p in pts], [p[1] for p in pts], m.get("chartPreviousClose"), cur
+    # 每個時段＝本段盤前開始～下一段盤前開始（指數官方收盤價常在收盤後 1 小時左右才寫入）
+    starts = [(d.get("pre") or d["reg"])[0] for d in days] + [float("inf")]
+    groups = [[p for p in pts if starts[i] <= p[0] < starts[i + 1]] for i in range(len(days))]
+    have = [i for i, g in enumerate(groups) if g]
+    if not have:
+        return [], [], m.get("chartPreviousClose"), cur
+    g = groups[have[-1]]
+    prev = groups[have[-2]][-1][1] if len(have) > 1 else m.get("chartPreviousClose")
+    return [p[0] for p in g], [p[1] for p in g], prev, days[have[-1]]
+
+
 def fetch_ticker_5m(raw):
     """台股數字代號→cnyes 5分線；其餘視為 Yahoo 標的 5分線。回傳 {t,c,prev,market,name,mkt}"""
     raw = raw.strip()
@@ -955,23 +988,28 @@ def fetch_ticker_5m(raw):
         return {"t": t2, "c": c2, "prev": prev, "market": "tw",
                 "name": name or raw.upper(), "mkt": "台股"}
     sym = raw.upper()
+    idx = sym.startswith("^")   # 指數（^N225 等）沒有盤前成交 → 抓 5d 只留最近有成交的時段（同 fetch_usidx）
     d = json.loads(_http(
         "https://query1.finance.yahoo.com/v8/finance/chart/" +
-        urllib.parse.quote(sym) + "?interval=5m&range=1d&includePrePost=true",
+        urllib.parse.quote(sym) + "?interval=5m&range=" + ("5d" if idx else "1d") + "&includePrePost=true",
         headers={"User-Agent": UA}, timeout=12))
     r0 = d["chart"]["result"][0]
-    ts = r0.get("timestamp") or []
-    cl = (r0.get("indicators", {}).get("quote") or [{}])[0].get("close") or []
-    t2, c2 = [], []
-    for a, b in zip(ts, cl):
-        if b is not None:
-            t2.append(a)
-            c2.append(round(float(b), 2))
     meta = r0.get("meta", {})
+    if idx:
+        t2, c2, prev, sess = _yahoo_last_session(r0)
+    else:
+        ts = r0.get("timestamp") or []
+        cl = (r0.get("indicators", {}).get("quote") or [{}])[0].get("close") or []
+        t2, c2 = [], []
+        for a, b in zip(ts, cl):
+            if b is not None:
+                t2.append(a)
+                c2.append(round(float(b), 2))
+        prev, sess = meta.get("chartPreviousClose"), _yahoo_sessions(meta)
     name = meta.get("shortName") or meta.get("longName") or sym
-    return {"t": t2, "c": c2, "prev": meta.get("chartPreviousClose"),
+    return {"t": t2, "c": c2, "prev": prev,
             "market": "us", "name": name, "mkt": _yahoo_market(sym, meta),
-            "sess": _yahoo_sessions(meta)}
+            "sess": sess}
 
 
 def get_ticker(raw):
