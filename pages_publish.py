@@ -123,11 +123,15 @@ def http_get(path, timeout=25):
         return r.read()
 
 
+_NOWIN = 0x08000000 if os.name == "nt" else 0  # CREATE_NO_WINDOW：pythonw 下呼叫 git 不再閃黑窗
+
+
 def git(cwd, *args, timeout=180):
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never")
     return subprocess.run(["git", "-C", str(cwd)] + list(args),
                           capture_output=True, text=True, encoding="utf-8",
-                          errors="replace", timeout=timeout, env=env)
+                          errors="replace", timeout=timeout, env=env,
+                          creationflags=_NOWIN)
 
 
 def ensure_repo(path, branch):

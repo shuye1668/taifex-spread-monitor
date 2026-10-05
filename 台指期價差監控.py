@@ -152,9 +152,10 @@ def third_wed(y, m):
 
 
 # ---------------------------------------------------------------- 即時報價抓取
-def fetch_taifex(cid):
+def _fetch_taifex_market(cid, market):
+    """market "0"＝一般（日盤，含現貨 -S 列）；"1"＝盤後（夜盤，合約代碼結尾 -M）。"""
     body = json.dumps({
-        "MarketType": "0", "SymbolType": "F", "KindID": "1", "CID": cid,
+        "MarketType": market, "SymbolType": "F", "KindID": "1", "CID": cid,
         "ExpireMonth": "", "RowSize": "全部", "PageNo": "",
         "SortColumn": "", "AscDesc": "A",
     }).encode("utf-8")
@@ -167,7 +168,7 @@ def fetch_taifex(cid):
     keep = []
     for q in rows:
         sid = q.get("SymbolID", "")
-        if not (sid.endswith("-S") or re.match(r"^[A-Z]{3}[A-L]\d-F$", sid)):
+        if not (sid.endswith("-S") or re.match(r"^[A-Z]{3}[A-L]\d-[FM]$", sid)):
             continue
         keep.append({"sym": sid, "name": q.get("DispCName"),
                      "last": q.get("CLastPrice"), "ref": q.get("CRefPrice"),
@@ -178,23 +179,76 @@ def fetch_taifex(cid):
     return keep
 
 
+def _in_night_session():
+    """期交所夜盤：平日 15:00 起到隔天 05:00（週一 15:00 … 週六 05:00）；多留 5 分鐘收尾。"""
+    t = datetime.now(TZ_TW)
+    hm, wd = t.hour * 100 + t.minute, t.weekday()
+    return (wd <= 4 and hm >= 1500) or (1 <= wd <= 5 and hm <= 505)
+
+
+def fetch_taifex(cid):
+    """日盤報價（含現貨）；夜盤時段再疊上夜盤成交價。
+
+    2026-10-05：原本只抓 MarketType 0，夜盤時期貨價停在 13:45 的日盤收盤，
+    頁面雖標「夜盤」、也有「現貨已收盤」提示，期貨卻不會動。夜盤有成交的合約，
+    改用夜盤的最新價／時間／買賣價／量，參考價換成夜盤的參考價（＝當天日盤結算），
+    漲跌即「夜盤相對日盤收盤」，與鉅亨的台指期(含夜盤)一致。夜盤沒成交的合約維持日盤值。
+    快照只在日盤時段記錄（_in_session），夜盤價不會進歷史。"""
+    day = _fetch_taifex_market(cid, "0")
+    if not _in_night_session():
+        return day
+    try:
+        night = _fetch_taifex_market(cid, "1")
+    except Exception:
+        return day
+    by = {r["sym"]: r for r in day}
+    for n in night:
+        if not n["sym"].endswith("-M") or num(n.get("last")) in (None, 0):
+            continue
+        d = by.get(n["sym"][:-1] + "F")
+        if d is None:
+            continue
+        d.update({"last": n["last"], "ref": n["ref"] or d["ref"], "date": n["date"], "time": n["time"],
+                  "bid": n["bid"], "ask": n["ask"], "vol": n["vol"], "test": "", "ttime": "", "sess": "N"})
+    return day
+
+
 def fetch_sgx():
+    """SGX 富台期（延遲報價）。
+
+    2026-10-05 修正兩件事：
+      1. record-update-time 是 UTC（例 20261005_073911＝台北 15:39:11），原本直接顯示在卡片標頭，
+         看起來像早上 7 點的舊資料 → 改用 last-update-time（新加坡時間＝台北時間）轉成「MM/DD HH:MM」。
+      2. 同一合約有日盤（session 0）與 T+1 夜盤（session 1）兩列，原本只取較新的一列；
+         夜盤那列沒有結算價也沒有漲跌，晚上富台就沒有漲跌箭頭 → 價格取最新一列，
+         結算價取有值的那列，最新列沒漲跌時以「最新價 − 當日日盤結算價」補上。"""
     raw = _http("https://api.sgx.com/derivatives/v1.0/?category=futures",
                 headers={"User-Agent": UA}, timeout=20)
     d = json.loads(raw)
-    tw = {}
+    rows = {}
     for x in (d.get("data") or []):
         s = str(x.get("symbol", ""))
         if s.startswith("TWN") and "_" not in s:
-            cur = tw.get(s)
-            if not cur or str(x.get("record-update-time", "")) > str(cur.get("record-update-time", "")):
-                tw[s] = x
-    return [{"sym": x.get("symbol"), "last": x.get("last-traded-price-adj"),
-             "bid": x.get("best-bid-price-abs"), "ask": x.get("best-ask-price-abs"),
-             "settle": x.get("daily-settlement-price-adj"),
-             "ltd": x.get("last-trading-date"),
-             "chg": x.get("change-abs"), "chgPct": x.get("change-percentage"),
-             "upd": x.get("record-update-time")} for x in tw.values()]
+            rows.setdefault(s, []).append(x)
+    out = []
+    for s, xs in rows.items():
+        xs.sort(key=lambda x: str(x.get("record-update-time", "")))
+        cur = xs[-1]
+        settle = next((num(x.get("daily-settlement-price-adj")) for x in reversed(xs)
+                       if num(x.get("daily-settlement-price-adj")) is not None), None)
+        last = num(cur.get("last-traded-price-adj"))
+        chg, pct = num(cur.get("change-abs")), num(cur.get("change-percentage"))
+        if (chg is None or pct is None) and last is not None and settle:
+            chg = round(last - settle, 2)
+            pct = round(chg / settle * 100, 2)
+        lut = str(cur.get("last-update-time") or "")          # 例 "2026-10-05 15:39:11.0"（SGT＝台北時間）
+        upd = (lut[5:7] + "/" + lut[8:10] + " " + lut[11:16]) if len(lut) >= 16 else str(cur.get("record-update-time") or "")
+        out.append({"sym": s, "last": cur.get("last-traded-price-adj"),
+                    "bid": cur.get("best-bid-price-abs"), "ask": cur.get("best-ask-price-abs"),
+                    "settle": settle, "ltd": cur.get("last-trading-date"),
+                    "chg": chg, "chgPct": pct, "upd": upd,
+                    "sess": "N" if str(cur.get("current-trading-session")) == "1" else "D"})
+    return out
 
 
 REF_SYMS = ["TWS:2330:STOCK", "TWS:2317:STOCK", "TWS:2454:STOCK", "TWS:0050:STOCK",
@@ -1424,9 +1478,15 @@ function buildQuotes(raw, todayStr) {
         let chg = null, pct = null;
         const ref = num(r.ref);
         if (px != null && ref != null) { chg = Math.round((px - ref) * 100) / 100; pct = ref ? Math.round(chg / ref * 10000) / 100 : null; }
-        return info ? { ...info, px, chg, pct, vol: num(r.vol), isTest, sym: r.sym } : null;
+        return info ? { ...info, px, chg, pct, vol: num(r.vol), isTest, sym: r.sym, sess: r.sess, qd: r.date, qt: r.time } : null;
       }).filter(x => x && x.px != null && x.settle >= todayStr).sort((a, b) => a.ym.localeCompare(b.ym));
       near = futs[0] || null; next = futs[1] || null;
+      // 2026-10-05：夜盤時伺服器已疊上夜盤成交價（sess＝"N"）→ 標頭時間改顯示期貨成交時間並註明夜盤
+      if (near && near.sess === "N") {
+        const qd = String(near.qd || ""), qt = String(near.qt || "");
+        if (qd.length === 8 && qt.length >= 4) qTime = qd.slice(4, 6) + "/" + qd.slice(6, 8) + " " + qt.slice(0, 2) + ":" + qt.slice(2, 4) + " 夜盤";
+        src = "期交所MIS";
+      }
     } else if (raw.cnyes) {
       src = "鉅亨備援";
       const f = raw.cnyes[CNYES_FUT[p]], i = raw.cnyes[CNYES_IDX[p]];
@@ -1593,7 +1653,8 @@ function momentum(p) {
       break;
     }
   }
-  return { m5, day0 };
+  // 快照只在日盤記錄；最後一筆超過 15 分鐘＝已收盤（夜盤或盤後），動量描述的是日盤，不是「現在」
+  return { m5, day0, stale: (Date.now() / 1000 - nowT) > 900 };
 }
 
 // ---------- 抓取 ----------
@@ -1673,11 +1734,14 @@ function render(res, raw) {
   badge.textContent = (usedTaifex ? "期交所MIS ＋ SGX" : "鉅亨備援 ＋ SGX（期交所暫不可用）") + "｜" + sess;
   badge.className = "badge " + (usedTaifex ? "live" : "warn");
   const alert = document.getElementById("staleAlert");
-  const ageDays = Math.floor((new Date(tStr) - new Date(cfg.seedDate)) / 86400000);
-  const lastDaily = cfg.daily.length ? cfg.daily[cfg.daily.length - 1][0] : cfg.seedDate;
-  if (tStr > lastDaily || ageDays > 14) {
+  // 2026-10-02：除息點數改由 update_div_config.py 每天用證交所資料自動更新（divUpdated＝更新日）；
+  // seedDate 改成歷史起點（讓歷史圖也算得出當時的未除息點數），所以「過期」改看 divUpdated。
+  const updDate = cfg.divUpdated || cfg.seedDate;
+  const ageDays = Math.floor((new Date(tStr) - new Date(updDate)) / 86400000);
+  const lastDaily = cfg.daily.length ? cfg.daily[cfg.daily.length - 1][0] : updDate;
+  if (tStr > lastDaily || ageDays > (cfg.divUpdated ? 3 : 14)) {
     alert.style.display = "block";
-    alert.textContent = "⚠ 除息資料基準日為 " + cfg.seedDate + "（每日明細至 " + lastDaily + "），已超出涵蓋範圍或超過兩週。還原價差可能失準，請至「除息資料設定」更新最新除息預估數據。";
+    alert.textContent = "⚠ 除息資料最後更新於 " + updDate + "（每日明細至 " + lastDaily + "），已過期。還原價差可能失準 —— 每天 08:20 會自動更新（工作排程器 Spread_DivUpdate）；沒更新請檢查該工作，或至「除息資料設定」手動更新。";
   } else alert.style.display = "none";
 
   const cards = document.getElementById("cards");
@@ -1723,7 +1787,8 @@ function render(res, raw) {
       else if (a < 0) sig = "還原後逆價差 <b class='neg'>" + fmt(a) + "</b> 點" + (pct != null ? "（" + pct.toFixed(2) + "%）" : "") + "，期貨貼水、偏空";
       else sig = "還原後價差近於零，期現貨大致平衡";
       const mo = momentum(p);
-      if (mo) sig += chipHtml("5分鐘變化", mo.m5, "還原價差與約5分鐘前相比的變化") + chipHtml("今日以來", mo.day0, "還原價差與今天第一筆紀錄相比的變化");
+      if (mo && !mo.stale) sig += chipHtml("5分鐘變化", mo.m5, "還原價差與約5分鐘前相比的變化") + chipHtml("今日以來", mo.day0, "還原價差與今天第一筆紀錄相比的變化");
+      else if (mo) sig += chipHtml("日盤最後5分鐘", mo.m5, "快照只在日盤記錄：這是日盤收盤前約5分鐘的還原價差變化，不是現在") + chipHtml("日盤全天", mo.day0, "快照只在日盤記錄：這是今天日盤第一筆到最後一筆的還原價差變化");
       const fair = fairCost(r.spot, r.near.settle, tStr);
       if (fair != null) {
         const dev = Math.round((a - fair) * 100) / 100;
